@@ -1,0 +1,932 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Face Detection Monitor</title>
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+        }
+
+        body {
+            background-color: #f2f2f7;
+            color: #1d1d1f;
+            line-height: 1.4;
+            padding: 20px;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 500px; /* Lebar tetap sama untuk semua device */
+            margin: 0 auto;
+        }
+
+        /* Header */
+        .header {
+            text-align: center;
+            margin-bottom: 24px;
+            padding-top: 10px;
+        }
+
+        .header h1 {
+            font-size: 28px;
+            font-weight: 700;
+            color: #1d1d1f;
+            margin-bottom: 4px;
+        }
+
+        .header p {
+            font-size: 15px;
+            color: #86868b;
+            font-weight: 400;
+        }
+
+        /* Status Bar */
+        .status-bar {
+            background: white;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
+            width: 100%;
+        }
+
+        .connection-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .status-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background-color: #ff3b30;
+        }
+
+        .status-indicator.connected {
+            background-color: #34c759;
+        }
+
+        .status-text {
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .last-update {
+            font-size: 13px;
+            color: #86868b;
+        }
+
+        /* Main Grid - Tetap 1 kolom untuk semua */
+        .grid {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            width: 100%;
+        }
+
+        /* Cards */
+        .card {
+            background: white;
+            border-radius: 16px;
+            padding: 20px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            width: 100%;
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        .card-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #1d1d1f;
+        }
+
+        .card-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: #007aff;
+            color: white;
+        }
+
+        /* Video Card - Gambar QCIF (176x144) */
+        #videoFeed {
+            width: 176px;
+            height: 144px;
+            border-radius: 8px;
+            background-color: #000;
+            margin: 0 auto 16px auto;
+            display: block;
+            object-fit: cover;
+            border: 2px solid #e5e5ea;
+        }
+
+        .video-placeholder {
+            width: 176px;
+            height: 144px;
+            border-radius: 8px;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: #86868b;
+            margin: 0 auto 16px auto;
+        }
+
+        .video-placeholder i {
+            font-size: 36px;
+            margin-bottom: 8px;
+            opacity: 0.6;
+        }
+
+        .video-placeholder span {
+            font-size: 14px;
+        }
+
+        /* Controls */
+        .controls {
+            display: flex;
+            gap: 12px;
+            margin-top: 8px;
+            width: 100%;
+        }
+
+        .btn {
+            flex: 1;
+            padding: 12px 16px;
+            border: none;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: all 0.2s ease;
+        }
+
+        .btn-primary {
+            background-color: #007aff;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background-color: #0056cc;
+        }
+
+        .btn-secondary {
+            background-color: #f2f2f7;
+            color: #1d1d1f;
+        }
+
+        .btn-secondary:hover {
+            background-color: #e5e5ea;
+        }
+
+        .btn-danger {
+            background-color: #ff3b30;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background-color: #d70015;
+        }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            width: 100%;
+        }
+
+        .stat-item {
+            background-color: #f2f2f7;
+            border-radius: 10px;
+            padding: 14px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 22px;
+            font-weight: 700;
+            color: #1d1d1f;
+            margin-bottom: 4px;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: #86868b;
+            font-weight: 500;
+        }
+
+        /* Face Detection */
+        .faces-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 12px;
+            justify-content: center;
+            width: 100%;
+        }
+
+        .face-box {
+            background: linear-gradient(135deg, #007aff 0%, #0056cc 100%);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 500;
+            min-width: 65px;
+            text-align: center;
+        }
+
+        .no-faces {
+            text-align: center;
+            color: #86868b;
+            font-size: 13px;
+            padding: 14px;
+            background-color: #f2f2f7;
+            border-radius: 10px;
+            width: 100%;
+        }
+
+        /* Logs */
+        .logs-container {
+            height: 180px;
+            overflow-y: auto;
+            background-color: #f2f2f7;
+            border-radius: 12px;
+            padding: 10px;
+            margin-top: 12px;
+            width: 100%;
+        }
+
+        .log-entry {
+            padding: 8px;
+            background: white;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            font-size: 12px;
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            border-left: 4px solid #007aff;
+        }
+
+        .log-time {
+            color: #86868b;
+            font-weight: 500;
+            min-width: 65px;
+            font-size: 11px;
+        }
+
+        .log-message {
+            flex: 1;
+            color: #1d1d1f;
+            font-size: 12px;
+        }
+
+        /* Status Items */
+        .status-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            width: 100%;
+        }
+
+        .status-line {
+            display: flex;
+            justify-content: space-between;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #f2f2f7;
+        }
+
+        .status-label {
+            color: #86868b;
+            font-size: 13px;
+        }
+
+        .status-value {
+            font-weight: 500;
+            font-size: 13px;
+        }
+
+        .status-value.online {
+            color: #34c759;
+        }
+
+        .status-value.offline {
+            color: #ff3b30;
+        }
+
+        .status-value.waiting {
+            color: #ff9500;
+        }
+
+        /* Toast Notification */
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            background-color: #1d1d1f;
+            color: white;
+            padding: 14px 20px;
+            border-radius: 12px;
+            font-size: 14px;
+            font-weight: 500;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+            transition: transform 0.3s ease;
+            z-index: 1000;
+            max-width: 400px;
+            width: 90%;
+            text-align: center;
+        }
+
+        .toast.show {
+            transform: translateX(-50%) translateY(0);
+        }
+
+        /* Loading Animation */
+        .loading {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #007aff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Footer */
+        .footer {
+            text-align: center;
+            margin-top: 24px;
+            padding-top: 16px;
+            border-top: 1px solid #e5e5ea;
+            color: #86868b;
+            font-size: 13px;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Face Detection Monitor</h1>
+            <p>Real-time monitoring via ESP32-CAM</p>
+        </div>
+
+        <div class="status-bar">
+            <div class="connection-status">
+                <div class="status-indicator" id="statusIndicator"></div>
+                <span class="status-text" id="connectionStatus">Disconnected</span>
+            </div>
+            <div class="last-update">
+                Last update: <span id="lastUpdateTime">--:--:--</span>
+            </div>
+        </div>
+
+        <div class="grid">
+            <!-- Video Stream -->
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">Live Stream</h2>
+                    <div class="card-icon">
+                        <i class="fas fa-video"></i>
+                    </div>
+                </div>
+                
+                <!-- Gambar langsung ditampilkan tanpa delay -->
+                <div id="videoPlaceholder" class="video-placeholder">
+                    <i class="fas fa-video-slash"></i>
+                    <span>Waiting for stream...</span>
+                </div>
+                <img id="videoFeed" style="display: none;" alt="Live stream">
+                
+                <div class="controls">
+                    <button id="toggleStream" class="btn btn-primary" onclick="toggleStream()">
+                        <i class="fas fa-play"></i>
+                        <span>Start Stream</span>
+                    </button>
+                    <button class="btn btn-secondary" onclick="location.reload()">
+                        <i class="fas fa-redo"></i>
+                        <span>Refresh</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- System Status -->
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">System Status</h2>
+                    <div class="card-icon">
+                        <i class="fas fa-microchip"></i>
+                    </div>
+                </div>
+                
+                <div class="status-list">
+                    <div class="status-line">
+                        <span class="status-label">State</span>
+                        <span class="status-value" id="systemState">Idle</span>
+                    </div>
+                    <div class="status-line">
+                        <span class="status-label">Save Mode</span>
+                        <span class="status-value" id="saveMode">Ready</span>
+                    </div>
+                    <div class="status-line">
+                        <span class="status-label">Photos Saved</span>
+                        <span class="status-value" id="photoCount">0</span>
+                    </div>
+                    <div class="status-line">
+                        <span class="status-label">SD Card</span>
+                        <span class="status-value" id="sdStatus">Unknown</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Face Detection -->
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">Face Detection</h2>
+                    <div class="card-icon">
+                        <i class="fas fa-user-circle"></i>
+                    </div>
+                </div>
+                
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <div class="stat-value" id="faceCount">0</div>
+                        <div class="stat-label">Faces</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="inferenceTime">0ms</div>
+                        <div class="stat-label">Inference</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="fps">0.0</div>
+                        <div class="stat-label">FPS</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="frameSize">0 KB</div>
+                        <div class="stat-label">Frame Size</div>
+                    </div>
+                </div>
+                
+                <div class="faces-container" id="facesContainer">
+                    <div class="no-faces">No faces detected</div>
+                </div>
+            </div>
+
+            <!-- Event Logs -->
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">Event Logs</h2>
+                    <div class="card-icon">
+                        <i class="fas fa-list-alt"></i>
+                    </div>
+                </div>
+                
+                <div class="logs-container" id="logsContainer">
+                    <div class="log-entry">
+                        <span class="log-time" id="logTime">--:--:--</span>
+                        <span class="log-message">System initialized</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>ESP32-CAM Face Detection System • Connected to: <span id="brokerInfo">broker.emqx.io</span></p>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+        // MQTT Configuration
+        const MQTT_CONFIG = {
+            broker: 'wss://broker.emqx.io:8084/mqtt',
+            topics: {
+                frame: 'esp32cam/frame',
+                status: 'esp32cam/status',
+                detection: 'esp32cam/detection',
+                fps: 'esp32cam/fps'
+            }
+        };
+
+        // App State
+        const AppState = {
+            mqttClient: null,
+            isConnected: false,
+            streamEnabled: true, // Langsung aktif
+            lastFrameTime: 0,
+            frameCount: 0,
+            logs: [],
+            stats: {
+                totalFrames: 0,
+                totalFaces: 0,
+                lastUpdate: Date.now()
+            }
+        };
+
+        // DOM Elements
+        const Elements = {
+            // Status
+            statusIndicator: document.getElementById('statusIndicator'),
+            connectionStatus: document.getElementById('connectionStatus'),
+            lastUpdateTime: document.getElementById('lastUpdateTime'),
+            brokerInfo: document.getElementById('brokerInfo'),
+            
+            // Video
+            videoFeed: document.getElementById('videoFeed'),
+            videoPlaceholder: document.getElementById('videoPlaceholder'),
+            toggleStream: document.getElementById('toggleStream'),
+            
+            // System
+            systemState: document.getElementById('systemState'),
+            saveMode: document.getElementById('saveMode'),
+            photoCount: document.getElementById('photoCount'),
+            sdStatus: document.getElementById('sdStatus'),
+            
+            // Detection
+            faceCount: document.getElementById('faceCount'),
+            inferenceTime: document.getElementById('inferenceTime'),
+            fps: document.getElementById('fps'),
+            frameSize: document.getElementById('frameSize'),
+            facesContainer: document.getElementById('facesContainer'),
+            
+            // Logs
+            logsContainer: document.getElementById('logsContainer'),
+            logTime: document.getElementById('logTime'),
+            
+            // Toast
+            toast: document.getElementById('toast')
+        };
+
+        // Initialize MQTT Connection
+        function initMQTT() {
+            logMessage('Connecting to MQTT broker...');
+            
+            const clientId = 'face_monitor_' + Math.random().toString(16).substr(2, 8);
+            
+            AppState.mqttClient = mqtt.connect(MQTT_CONFIG.broker, {
+                clientId: clientId,
+                clean: true,
+                reconnectPeriod: 2000,
+                connectTimeout: 5000,
+                keepalive: 30
+            });
+
+            // Connection Events
+            AppState.mqttClient.on('connect', () => {
+                AppState.isConnected = true;
+                updateConnectionStatus(true);
+                logMessage('Connected to MQTT broker');
+                showToast('Connected to MQTT broker', 'success');
+                
+                // Subscribe to all topics
+                Object.values(MQTT_CONFIG.topics).forEach(topic => {
+                    AppState.mqttClient.subscribe(topic, (err) => {
+                        if (!err) {
+                            console.log(`Subscribed to ${topic}`);
+                        }
+                    });
+                });
+            });
+
+            // Message Handler
+            AppState.mqttClient.on('message', (topic, message) => {
+                try {
+                    const msgStr = message.toString();
+                    
+                    if (topic === MQTT_CONFIG.topics.frame) {
+                        handleFrameMessage(msgStr);
+                    } else {
+                        try {
+                            const data = JSON.parse(msgStr);
+                            handleJSONMessage(topic, data);
+                        } catch (e) {
+                            console.log('Raw message:', msgStr);
+                        }
+                    }
+                    
+                    updateLastUpdateTime();
+                } catch (error) {
+                    console.error('Error processing message:', error);
+                }
+            });
+
+            // Error Events
+            AppState.mqttClient.on('error', (error) => {
+                console.error('MQTT error:', error);
+                AppState.isConnected = false;
+                updateConnectionStatus(false);
+                logMessage(`MQTT error: ${error.message}`);
+            });
+
+            AppState.mqttClient.on('close', () => {
+                console.log('MQTT connection closed');
+                AppState.isConnected = false;
+                updateConnectionStatus(false);
+                logMessage('MQTT connection closed');
+            });
+
+            // Update broker info
+            Elements.brokerInfo.textContent = MQTT_CONFIG.broker.split('/')[2];
+        }
+
+        // Handle Frame Messages - Gambar langsung ditampilkan
+        function handleFrameMessage(message) {
+            if (!AppState.streamEnabled) return;
+            
+            const parts = message.split('|');
+            if (parts.length >= 3) {
+                const timestamp = parts[0];
+                const size = parseInt(parts[1]);
+                const base64Data = parts[2];
+                
+                // Langsung tampilkan gambar tanpa delay
+                if (base64Data && base64Data.length > 100) {
+                    Elements.videoFeed.src = 'data:image/jpeg;base64,' + base64Data;
+                    Elements.videoFeed.style.display = 'block';
+                    Elements.videoPlaceholder.style.display = 'none';
+                    
+                    // Update stats
+                    AppState.stats.totalFrames++;
+                    AppState.lastFrameTime = Date.now();
+                    Elements.frameSize.textContent = (size / 1024).toFixed(1) + ' KB';
+                    
+                    // Update frame count occasionally
+                    if (AppState.stats.totalFrames % 10 === 0) {
+                        logMessage(`Frame received: ${size} bytes`);
+                    }
+                }
+            }
+        }
+
+        // Handle JSON Messages
+        function handleJSONMessage(topic, data) {
+            switch(topic) {
+                case MQTT_CONFIG.topics.status:
+                    handleStatusMessage(data);
+                    break;
+                case MQTT_CONFIG.topics.detection:
+                    handleDetectionMessage(data);
+                    break;
+                case MQTT_CONFIG.topics.fps:
+                    handleFPSMessage(data);
+                    break;
+            }
+        }
+
+        function handleStatusMessage(data) {
+            // Update system state
+            if (data.state) {
+                const stateMap = {
+                    'waiting_face': 'Waiting for Face',
+                    'saving_image': 'Saving Image',
+                    'cooldown': 'Cooldown',
+                    'no_face_timer': 'No Face Timer'
+                };
+                Elements.systemState.textContent = stateMap[data.state] || data.state;
+            }
+            
+            if (data.can_save !== undefined) {
+                Elements.saveMode.textContent = data.can_save ? 'Ready to Save' : 'Waiting Period';
+                Elements.saveMode.className = `status-value ${data.can_save ? 'online' : 'waiting'}`;
+            }
+            
+            if (data.photos !== undefined) {
+                Elements.photoCount.textContent = data.photos;
+            }
+            
+            if (data.sd !== undefined) {
+                Elements.sdStatus.textContent = data.sd ? 'Ready' : 'Not Ready';
+                Elements.sdStatus.className = `status-value ${data.sd ? 'online' : 'offline'}`;
+            }
+            
+            if (data.event === 'saved') {
+                logMessage(`Image saved: ${data.file} (${data.size} bytes)`);
+                showToast('Image saved to SD card', 'success');
+            } else if (data.event === 'reset') {
+                logMessage('Timer reset - Ready to save again');
+            }
+        }
+
+        function handleDetectionMessage(data) {
+            // Update face count
+            const faceCount = data.count || 0;
+            Elements.faceCount.textContent = faceCount;
+            AppState.stats.totalFaces += faceCount;
+            
+            // Update inference time
+            if (data.time !== undefined) {
+                Elements.inferenceTime.textContent = data.time + 'ms';
+            }
+            
+            // Update faces display
+            updateFacesDisplay(faceCount);
+            
+            // Log detection
+            if (faceCount > 0) {
+                logMessage(`${faceCount} face(s) detected`);
+            }
+        }
+
+        function handleFPSMessage(data) {
+            if (data.fps !== undefined) {
+                Elements.fps.textContent = data.fps.toFixed(1);
+            }
+        }
+
+        // Update Faces Display
+        function updateFacesDisplay(count) {
+            const container = Elements.facesContainer;
+            container.innerHTML = '';
+            
+            if (count > 0) {
+                for (let i = 0; i < count; i++) {
+                    const faceBox = document.createElement('div');
+                    faceBox.className = 'face-box';
+                    faceBox.textContent = `Face ${i + 1}`;
+                    container.appendChild(faceBox);
+                }
+            } else {
+                const noFaces = document.createElement('div');
+                noFaces.className = 'no-faces';
+                noFaces.textContent = 'No faces detected';
+                container.appendChild(noFaces);
+            }
+        }
+
+        // Update Connection Status
+        function updateConnectionStatus(connected) {
+            const indicator = Elements.statusIndicator;
+            const statusText = Elements.connectionStatus;
+            
+            if (connected) {
+                indicator.className = 'status-indicator connected';
+                statusText.textContent = 'Connected';
+                statusText.className = 'status-text online';
+            } else {
+                indicator.className = 'status-indicator';
+                statusText.textContent = 'Disconnected';
+                statusText.className = 'status-text offline';
+            }
+        }
+
+        // Toggle Stream
+        function toggleStream() {
+            AppState.streamEnabled = !AppState.streamEnabled;
+            const button = Elements.toggleStream;
+            
+            if (AppState.streamEnabled) {
+                button.innerHTML = '<i class="fas fa-pause"></i><span>Stop Stream</span>';
+                button.className = 'btn btn-danger';
+                logMessage('Stream started');
+                showToast('Stream started', 'info');
+            } else {
+                button.innerHTML = '<i class="fas fa-play"></i><span>Start Stream</span>';
+                button.className = 'btn btn-primary';
+                Elements.videoFeed.style.display = 'none';
+                Elements.videoPlaceholder.style.display = 'flex';
+                logMessage('Stream stopped');
+                showToast('Stream stopped', 'info');
+            }
+        }
+
+        // Log Message
+        function logMessage(message) {
+            const now = new Date();
+            const timeString = now.toLocaleTimeString('en-US', { 
+                hour12: false,
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+            
+            const logEntry = document.createElement('div');
+            logEntry.className = 'log-entry';
+            logEntry.innerHTML = `
+                <span class="log-time">${timeString}</span>
+                <span class="log-message">${message}</span>
+            `;
+            
+            Elements.logsContainer.insertBefore(logEntry, Elements.logsContainer.firstChild);
+            
+            // Keep only last 10 logs
+            const logs = Elements.logsContainer.querySelectorAll('.log-entry');
+            if (logs.length > 10) {
+                logs[logs.length - 1].remove();
+            }
+            
+            // Update log time
+            Elements.logTime.textContent = timeString;
+        }
+
+        // Update Last Update Time
+        function updateLastUpdateTime() {
+            const now = new Date();
+            Elements.lastUpdateTime.textContent = now.toLocaleTimeString('en-US', { 
+                hour12: false,
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+        }
+
+        // Show Toast Notification
+        function showToast(message, type = 'info') {
+            const toast = Elements.toast;
+            toast.textContent = message;
+            
+            // Set color based on type
+            if (type === 'success') {
+                toast.style.backgroundColor = '#34c759';
+            } else if (type === 'error') {
+                toast.style.backgroundColor = '#ff3b30';
+            } else {
+                toast.style.backgroundColor = '#1d1d1f';
+            }
+            
+            // Show toast
+            toast.classList.add('show');
+            
+            // Hide after 3 seconds
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 3000);
+        }
+
+        // Initialize App
+        function initApp() {
+            logMessage('Face Detection Monitor initialized');
+            updateLastUpdateTime();
+            
+            // Set tombol ke mode stop karena stream langsung aktif
+            Elements.toggleStream.innerHTML = '<i class="fas fa-pause"></i><span>Stop Stream</span>';
+            Elements.toggleStream.className = 'btn btn-danger';
+            
+            initMQTT();
+            
+            // Check for frame updates
+            setInterval(() => {
+                if (AppState.streamEnabled && AppState.lastFrameTime) {
+                    const secondsAgo = Math.floor((Date.now() - AppState.lastFrameTime) / 1000);
+                    if (secondsAgo > 10) {
+                        Elements.videoFeed.style.display = 'none';
+                        Elements.videoPlaceholder.style.display = 'flex';
+                    }
+                }
+                
+                // Update connection status
+                if (!AppState.isConnected && AppState.mqttClient) {
+                    updateConnectionStatus(false);
+                }
+            }, 5000);
+        }
+
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', () => {
+            if (AppState.mqttClient && AppState.isConnected) {
+                AppState.mqttClient.end();
+            }
+        });
+
+        // Initialize when page loads
+        window.addEventListener('load', initApp);
+    </script>
+</body>
+</html>
